@@ -1,0 +1,178 @@
+---
+title: "Weight Lifting Exercises: A Quality Prediction Model"
+output: html_document
+---
+
+```{r, echo=FALSE,message=FALSE,warning=FALSE}
+##require library and dataset
+
+library(caret)
+library(randomForest)
+library(ggplot2)
+require(gridExtra)
+setwd("D:/Datos/FJNAVARRO/Documents/Files/Specialization/MachineLearning/CourseProject")
+intrain <- read.table("pml-training.csv",sep=",",header=T)
+test <- read.table("pml-testing.csv",sep=",",header=T)
+
+```
+
+
+
+
+#####Executive Summary
+
+Technology has focused on developing health tools and gadgets to record how much training a person has done in a specific period of time. However, almost no research has been done in developing tools or models to give the trainer feedback on how well he has been performing exercises. This project is oriented in calculating a machine learning algorithm to determine whether a weight lifting trainer performed the exercise well or made an erro in the execution. A Random Forest algorithm is applied and cross validated to avoid over fitting. It is conclusive that the model performs with 99% accuracy and may be utilized to give feedback to weight lifting trainers.  
+
+
+
+
+#####Introduction 
+
+The last couple of years different tools have been developed to address health problems trainers face when exercising. For example, the Garmin Running or Triathlon Watches, use GPS and heart rate sensors to measure pace, distance, heart rate and others. These features help every runner analyze in a web based application how much has he run. However, the Garmin Connect app just like other health apps and tools developed, answer the question on how much training is done and almost never answer if the training was done properly or not. 
+
+This project focuses on answering how properly or how well a Weight Lifting Exercise has been done. For such problem, a quality prediction Model will be developed using Machine Learning Algorithms. The main objective of the project is to predict the manner in which a trainer did a specific exercise. 
+
+
+
+
+#####Dataset and Data Cleaning 
+```{r,echo=FALSE}
+##Clean NA and missing values functions 
+source("cleanNA.r")
+source("iteraNA.r")
+intrain1 <- intrain[,out]
+source("cleanMissing.r")
+source("iteraMissing.r")
+intrain2 <- intrain1[,fin]
+intrain3 <- intrain2[,-c(1,2,3,4,5,6,7)]
+
+##eliminates correlated variables
+intrian4 <- intrain3[,-53]
+descrCor <- cor(intrian4)
+highlyCorDescr <- findCorrelation(descrCor, cutoff = 0.75)
+intrain5 <- intrain3[, -highlyCorDescr]
+
+##builds partition for training and validation
+set.seed(1)
+int <- createDataPartition(y=intrain5$classe,p=0.75, list=FALSE)
+training <- intrain5[int,]
+validation <- intrain5[-int,]
+
+
+
+
+```
+
+
+
+
+The data set used for the model comes from the Groupware@LES from their Human Activity Recognition  project. They performed a study to analyze how well a Weight Lifting Exercise was executed. Each trainer was given a sensor for his glove, belt, dumbbell and arm-band. These are tools used by every weight lifting trainer so the original exercises maintain integrity. 
+
+Each trainer was asked to perform weight lifting in a particular manner. First, to do it perfectly as ideally described. Second, throwing the elbows to the front. Third, lifting the dumbbell half way. Fourth, lowering the dumbbell halfway. Finally, throwing the hips to the front. In each exercise performed, the sensors recorded the movements and rotations, including max accelerations, min accelerations, averages, kurtosis, between others. 
+
+The training data set consists of 19,622 rows and 160 columns. For the data cleaning, the most important step is eliminating NAs and Missing Values, since the data includes a lot of columns that even have 95% NAs in them. For that purpose, every column that had at least 25% of NAs, would be eliminated. This limit was also used for the missing values. In addition, columns, like the name or the time, were also eliminated, for they had nothing to explain in the predictive model. 
+
+After eliminating the NAs and missing values, variables with high correlations were eliminated using a 0.75 cutoff. Finally, the near zero variation code from the caret package was used to clean variables that had low prediction value for the classe variable in the data set. The data cleaning process reduced the final data set to 33 columns including the predictive variable 'classe'.
+
+Before executing Exploratory Analysis, two partitions will be created from the data set. One for training and model creation, another one for cross validating the results, before implementing the final prediction in the test data set. The code to create the partition is shown in the following code: 
+
+```{r}
+##builds partition for training and validation. The dataframe intrain5 contains the clean data
+int <- createDataPartition(y=intrain5$classe,p=0.75, list=FALSE)
+training <- intrain5[int,]
+validation <- intrain5[-int,]
+
+```
+
+
+
+
+
+
+#####Exploratory Analysis
+
+For the exploratory Analysis the most useful visualization are box plots using the ggplot2 package in r. 'Yaw_belt', 'pitch_forearm', 'magnet_dumbbell_z' and 'magnet_belt_z' seem the most important variables that best describe the 'classe' variable. In the following figure, the box plots for these variables are shown: 
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE, fig.height=3.5}
+require(gridExtra)
+require(ggplot2)
+p1 <- qplot(classe,yaw_belt,geom="boxplot",data=training,fill=classe)
+p2 <- qplot(classe,pitch_forearm,geom="boxplot",data=training,fill=classe)
+p3 <- qplot(classe,magnet_dumbbell_z,geom="boxplot",data=training,fill=classe)
+p4 <- qplot(classe,magnet_belt_z,geom="boxplot",data=training,fill=classe)
+grid.arrange(p1, p2,p3,p4, ncol=2)
+
+```
+
+In each box plot, one can see that the median and distribution for each variable is different between classes. The first variable 'yaw_belt' shows a lower median  for classe A and the rest of them, indicating a good predictor for classe A. Another example is the 'magnet_bell_z' that has lowest median for classe E, indicating a good predictor for classe E. 
+
+
+
+
+#####Model Design: Random Forest
+
+The approach for the model design is a classification Random Forest. The classe variable is actually a categorical variable and therefore a classification method performs better. One could use a single tree, but Random Forest have proven to be the most accurate classification algorithm, mainly for the  reduction of variability while averaging different random trees. The following code has been written to calculate the model and its confusion Matrix and OOB error rate: 
+
+```{r}
+set.seed(123)
+fit <- randomForest(classe ~.,   data=training,ntree=1000,importance=TRUE)
+fit
+
+
+```
+
+The Random Forest Model fits very well on the training set. It's 'Out of Bag' error rate is only 0.67% and the 'class A' has only 0.1% error rate. With the following code, one can see the most important variables to predict the outcomes:  
+
+``` {r}
+varImpPlot(fit,pch=20,col="blue")
+
+```
+
+Yaw_belt and magnet_dumbbell_z lower the Gini Index the most, followed by pitch_forearm. These were variables previously analyzed in the Exploratory Analysis. The next plot shows how the error rate decreases when the number of trees calculated increases:
+
+``` {r}
+plot(fit, log="y")
+legend("topright", colnames(fit$err.rate),col=1:4,cex=0.8,fill=1:4)
+
+``` 
+
+After 500 trees, the error rate seems almost constant and doesn't decrease significantly. Therefore one may conclude that the out of sample error rate will be closely to 0.6%.To make sure that this low error rate is not due to over fitting, on the next section, Cross Validation will be used to estimate the differences. 
+
+
+
+
+#####Cross Validation and Results
+
+When using Random Forest classification models, it is important to be cautious for over fitting. Therefore, the predicted model was implemented on the validation set and to address any over fitting problem. The following code predicts the outcomes for the validation data set: 
+
+```{r, warning=FALSE}
+pred <- predict(fit,validation);
+validation$predRight <- pred==validation$classe
+table(pred,validation$classe)
+qplot(yaw_belt,pitch_forearm,colour=predRight,data=validation,main="Validation Set Predictions")
+
+
+```
+
+With the confusion matrix one can see that the accuracy of the model is 99.5% on the validation set and that the model does not seem to be over fitting. As described in the previous section, the out of sample error rate is closely to 0.6%. On the validation set, it is only 0.5%. 
+
+
+
+
+#####Conclusion
+
+The sensors applied in the study and the variables measured by the sensors are excellent predictors for the models. The Random Forest algorithm achieves a percentage of accuracy of 99.5% in the validation set which is an excellent accuracy. This methodology could be very helpful for weight lifting trainers and one could think of developing a web based app that gives feedback to the trainer with the predicted data generated by the model. Furthermore there is not enough evidence that the model could be over fitting since in the validation set the model performed with excellent accuracy. On the other hand, Random Forests tend to be heavy on computational requirenments. However, the model executed in a couple of minutes using 1000 trees. Since the error rate doesn't seem to decrease when executing more than 500 trees, one may reduce the number of trees to run in the model. 
+
+
+
+
+
+#####Bibliography
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+
+
+
+
+
